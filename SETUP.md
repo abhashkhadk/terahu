@@ -1,111 +1,126 @@
 # TeraHub Configuration Guide
 
-## Files Overview
+## How configuration works
 
-### `.env` (⚠️ Keep Private)
+TeraHub is a static site. The browser needs a `config.js` file with your
+Firebase and AdSense settings, but that file must **not** be committed to Git.
 
-Contains your actual sensitive credentials:
+`config.js` is therefore **auto-generated at build time** by `build.js` from
+environment variables:
 
-- Google AdSense Publisher ID
-- Firebase API keys and config
-- Active ad configuration
+- **Locally** — from a `.env` file.
+- **On Netlify** — from Site settings → Environment variables.
 
-**Never commit this file to Git!** It's already in `.gitignore`
+## Files overview
 
-### `.env.example` (📋 Template)
+| File | Purpose | Committed? |
+| --- | --- | --- |
+| `build.js` | Generates `config.js` from environment variables. | ✅ Yes |
+| `.env.example` | Template for your local environment variables. | ✅ Yes |
+| `.env` | Your real local values. | ❌ No (gitignored) |
+| `config.js` | Generated runtime config loaded by the page. | ❌ No (gitignored) |
+| `config.example.js` | Documents the generated shape (manual fallback only). | ✅ Yes |
+| `.gitignore` | Keeps secrets out of version control. | ✅ Yes |
 
-Public template showing required environment variables.
-Safe to commit and share with team members.
-
-### `.gitignore` (🔒 Security)
-
-Prevents `.env` from being accidentally committed to version control.
+> **Note:** Firebase *web* API keys are not secrets — they are visible in any
+> client app. Your real protection is **Firebase Realtime Database rules** plus
+> the admin password hash. Still, keep all of it out of Git.
 
 ---
 
-## Setup Instructions
+## Local setup
 
-### 1. Clone/Setup
+### 1. Create your `.env`
 
 ```bash
-# Copy the example file to create your actual .env
 cp .env.example .env
 ```
 
-### 2. Edit `.env` with Your Details
+### 2. Fill in your values
 
 ```env
-GOOGLE_ADSENSE_PUBLISHER_ID=ca-pub-5713496705205122
-GOOGLE_ADSENSE_HEADER_SLOT=YOUR_ACTUAL_SLOT_ID
-GOOGLE_ADSENSE_SIDEBAR_SLOT=YOUR_ACTUAL_SLOT_ID
+GOOGLE_ADSENSE_PUBLISHER_ID=ca-pub-XXXXXXXXXXXX
+GOOGLE_ADSENSE_HEADER_SLOT=YOUR_HEADER_SLOT_ID
+GOOGLE_ADSENSE_SIDEBAR_SLOT=YOUR_SIDEBAR_SLOT_ID
+GOOGLE_ADSENSE_FEED_SLOT=YOUR_FEED_SLOT_ID
+
+FIREBASE_API_KEY=YOUR_FIREBASE_API_KEY
+FIREBASE_DATABASE_URL=https://your-project-default-rtdb.region.firebasedatabase.app
+# ...remaining Firebase values...
 ```
 
-### 3. Get Your Values
-
-- **AdSense Publisher ID**: From [Google AdSense](https://adsense.google.com)
-- **Slot IDs**: Create ad units in AdSense console
-- **Firebase**: From your Firebase project settings
-
----
-
-## Ad Unit Configuration
-
-| Variable                      | Size    | Placement                 | Status      |
-| ----------------------------- | ------- | ------------------------- | ----------- |
-| `GOOGLE_ADSENSE_HEADER_SLOT`  | 728x90  | Top of page               | ✅ Active   |
-| `GOOGLE_ADSENSE_SIDEBAR_SLOT` | 300x250 | Video detail page sidebar | ✅ Active   |
-| `GOOGLE_ADSENSE_FEED_SLOT`    | 300x250 | Between video grid        | ⏸️ Disabled |
-
----
-
-## Node.js Integration (Optional)
-
-If you want to load `.env` in a Node.js server:
+### 3. Generate `config.js`
 
 ```bash
-npm install dotenv
+node build.js
 ```
 
-```javascript
-require("dotenv").config();
-const publisherId = process.env.GOOGLE_ADSENSE_PUBLISHER_ID;
+### 4. Serve the site
+
+Open `terahub.html` directly, or serve the folder with any static server.
+
+---
+
+## Netlify setup
+
+1. Go to **Site settings → Environment variables** and add the same variables
+   from your `.env`.
+2. `netlify.toml` already runs `node build.js` before publishing.
+3. Trigger a new deploy. Netlify generates `config.js` during the build.
+
+---
+
+## Admin login
+
+The admin password is stored as a **hash**, never in plaintext.
+
+- The app accepts either a **SHA-256** hash (64 hex chars, recommended) or the
+  legacy djb2 hash (for backwards compatibility).
+- Set it via `ADMIN_PASSWORD_HASH` in `.env` / Netlify.
+- Generate a SHA-256 hash at: <https://emn178.github.io/online-tools/sha256.html>
+
+### ⚠️ Important limitations
+
+Admin login is enforced **client-side only**. Anyone can read the page source
+and bypass it. To actually protect your data you must:
+
+1. Lock down **Firebase Realtime Database rules** (see below).
+2. Consider migrating to **Firebase Authentication** for real access control.
+
+### Recommended Firebase rules (example)
+
+Only allow public reads and validated writes, and require auth for deletes.
+Adjust to your needs, then publish in the Firebase console:
+
+```json
+{
+  "rules": {
+    "videos": {
+      ".read": true,
+      ".write": "auth != null || newData.child('url').isString()",
+      "$id": {
+        ".validate": "newData.hasChildren(['url'])"
+      }
+    }
+  }
+}
 ```
 
 ---
 
-## Security Best Practices
+## Security checklist
 
-✅ **DO:**
-
-- Keep `.env` in `.gitignore`
-- Use `.env.example` as template
-- Regenerate keys periodically
-- Never share `.env` publicly
-
-❌ **DON'T:**
-
-- Commit `.env` to Git
-- Hardcode secrets in code
-- Share credentials via email
-- Use same keys across projects
-
----
-
-## Front-End Access (Current Setup)
-
-Your TeraHub currently uses hardcoded values in `terahub.html`.
-To use environment variables, you'd need:
-
-1. A build process (webpack, vite, etc.)
-2. A backend server to serve config
-3. Fetch config at runtime
-
-For now, the `.env` file documents your settings for reference.
+- ✅ Keep `.env` and `config.js` out of Git (already in `.gitignore`).
+- ✅ If credentials were ever committed, **rotate/regenerate them** — removing
+  a file does not remove it from Git history.
+- ✅ Add authorized domains to the Firebase API key restrictions.
+- ✅ Set and publish Firebase Database rules.
+- ❌ Do not rely on the client-side admin login as real security.
 
 ---
 
 ## Support
 
-- Update `.env` when you get new ad slots
-- Reference `.env.example` when onboarding new developers
-- Keep sensitive data in `.env` only
+- Update `.env` (and Netlify env vars) when you get new ad slots.
+- Reference `.env.example` when onboarding new developers.
+- Never commit real credentials.
