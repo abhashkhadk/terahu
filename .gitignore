@@ -4,7 +4,6 @@
 .env.*.local
 
 # App config with real credentials (use config.example.js as template)
-config.js
 
 # Node modules
 node_modules/
