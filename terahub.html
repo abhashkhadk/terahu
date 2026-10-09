@@ -235,8 +235,8 @@ nav {
     </nav>
 
     <!-- Header Ad -->
-    <div class="ad-container header-ad" style="display:flex; justify-content:center;">
-      <ins class="adsbygoogle" style="display:inline-block;width:728px;height:90px;max-width:100%" data-ad-client="ca-pub-5837561400790216" data-ad-slot="3453469275"></ins>
+    <div class="ad-container header-ad" style="display:flex; justify-content:center;" id="header-ad-container">
+      <!-- Injected via JS -->
     </div>
 
     <div id="page-home" class="page active">
@@ -479,11 +479,7 @@ nav {
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
     <!-- Google AdSense -->
-    <script
-      async
-      src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5837561400790216"
-      crossorigin="anonymous"
-    ></script>
+    <script id="adsense-script" async crossorigin="anonymous"></script>
 
     <script>
       // Load Firebase config from external config.js (gitignored)
@@ -491,6 +487,12 @@ nav {
         console.error('config.js not found! Copy config.example.js to config.js and fill in your values.');
       }
       const firebaseConfig = window.TERAHUB_CONFIG ? window.TERAHUB_CONFIG.firebase : {};
+      const adsConfig = window.TERAHUB_CONFIG ? window.TERAHUB_CONFIG.adsense : {};
+
+      // Initialize AdSense tag dynamically
+      if (adsConfig && adsConfig.publisherId) {
+        document.getElementById('adsense-script').src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=" + adsConfig.publisherId;
+      }
 
       // Initialize Firebase
       firebase.initializeApp(firebaseConfig);
@@ -513,6 +515,12 @@ nav {
           }
         });
       }
+      
+      // Inject Header Ad
+      if (adsConfig && adsConfig.headerEnabled) {
+        document.getElementById("header-ad-container").innerHTML = '<ins class="adsbygoogle" style="display:inline-block;width:728px;height:90px;max-width:100%" data-ad-client="' + adsConfig.publisherId + '" data-ad-slot="' + adsConfig.headerSlot + '"></ins>';
+      }
+
       console.log("Database URL:", firebaseConfig.databaseURL);
 
       var videos = [];
@@ -953,13 +961,14 @@ nav {
         }
         videos.forEach(function (v, index) {
           g.appendChild(makeCard(v));
-          // Insert ad every 4 videos
-          if ((index + 1) % 4 === 0) {
+          // Insert ad every N videos
+          var interval = (adsConfig && adsConfig.feedInterval) || 4;
+          if (adsConfig && adsConfig.feedEnabled && (index + 1) % interval === 0) {
             var adDiv = document.createElement("div");
             adDiv.className = "ad-container feed-ad-card";
             adDiv.style.display = "flex";
             adDiv.style.justifyContent = "center";
-            adDiv.innerHTML = '<ins class="adsbygoogle" style="display:inline-block;width:300px;height:250px" data-ad-client="ca-pub-5837561400790216" data-ad-slot="6832284964"></ins>';
+            adDiv.innerHTML = '<ins class="adsbygoogle" style="display:inline-block;width:300px;height:250px" data-ad-client="' + adsConfig.publisherId + '" data-ad-slot="' + adsConfig.feedSlot + '"></ins>';
             g.appendChild(adDiv);
             try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch(e) {}
           }
@@ -1025,9 +1034,10 @@ nav {
           '<h2 style="font-size: 28px; font-weight: 800; margin-bottom: 0.5rem; text-align: center; color: var(--color-text-primary);">' + esc(post.title) + '</h2>' +
           '<div style="font-size: 14px; color: var(--color-text-secondary); margin-bottom: 2rem; text-align: center; font-weight: 500;">' + esc(post.source) + ' • 👁️ ' + (post.views || 1) + ' views</div>' +
           
+          ((adsConfig && adsConfig.sidebarEnabled) ? 
           '<div class="ad-container" style="max-width: 728px; margin: 0 auto 2rem; display: flex; justify-content: center;">' +
-            '<ins class="adsbygoogle" style="display:block; width:100%" data-ad-client="ca-pub-5837561400790216" data-ad-slot="5644518347" data-ad-format="auto" data-full-width-responsive="true"></ins>' +
-          '</div>' +
+            '<ins class="adsbygoogle" style="display:block; width:100%" data-ad-client="' + adsConfig.publisherId + '" data-ad-slot="' + adsConfig.sidebarSlot + '" data-ad-format="auto" data-full-width-responsive="true"></ins>' +
+          '</div>' : '') +
 
           '<div class="unlock-container">' +
             '<h3 style="font-size: 22px; font-weight: 700; color: var(--color-text-primary); margin-bottom: 1.5rem;">Unlocking your Link</h3>' +
@@ -1042,9 +1052,10 @@ nav {
             '<div id="popup-blocked-warning" style="display: none; margin-top: 1.5rem; padding: 12px; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; font-size: 14px; color: #b45309;">⚠️ Popup blocked! Please click the Open Link button manually.</div>' +
           '</div>' +
 
+          ((adsConfig && adsConfig.sidebarEnabled) ?
           '<div class="ad-container" style="max-width: 728px; margin: 2rem auto 0; display: flex; justify-content: center;">' +
-            '<ins class="adsbygoogle" style="display:block; width:100%" data-ad-client="ca-pub-5837561400790216" data-ad-slot="5644518347" data-ad-format="auto" data-full-width-responsive="true"></ins>' +
-          '</div>';
+            '<ins class="adsbygoogle" style="display:block; width:100%" data-ad-client="' + adsConfig.publisherId + '" data-ad-slot="' + adsConfig.sidebarSlot + '" data-ad-format="auto" data-full-width-responsive="true"></ins>' +
+          '</div>' : '');
 
         showPage("detail");
         // Track page visit
