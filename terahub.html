@@ -261,7 +261,7 @@ nav {
             <button class="btn-primary" onclick="shareLink()">Share</button>
           </div>
           <div class="supported">
-            Supports any link —, Vimeo, websites, and more
+            Supports YouTube, Vimeo, Dailymotion, and any link
           </div>
         </div>
       </div>
@@ -499,11 +499,19 @@ nav {
 
       console.log("Firebase initialized!");
 
-      // Google AdSense Configuration
+      // Google AdSense — push a new ad unit safely
       function displayAds() {
-        if (window.adsbygoogle) {
-          window.adsbygoogle.push({});
-        }
+        try {
+          (window.adsbygoogle = window.adsbygoogle || []).push({});
+        } catch(e) {}
+      }
+      // Push all un-initialized ins.adsbygoogle elements on page
+      function displayAllAds() {
+        document.querySelectorAll('ins.adsbygoogle').forEach(function(ins) {
+          if (!ins.getAttribute('data-ad-status')) {
+            try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch(e) {}
+          }
+        });
       }
       console.log("Database URL:", firebaseConfig.databaseURL);
 
@@ -579,8 +587,8 @@ nav {
 
         // Refresh ads when page changes
         setTimeout(function () {
-          displayAds();
-        }, 100);
+          displayAllAds();
+        }, 300);
       }
 
       // Admin Functions
@@ -618,20 +626,60 @@ nav {
         document.getElementById("admin-password-input").value = "";
       }
 
-      async function hashPassword(password) {
-        const msgBuffer = new TextEncoder().encode(password);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      // ── Admin Login Rate Limiting ──────────────────────────────
+      var loginAttempts = 0;
+      var loginLockedUntil = 0;
+      var MAX_LOGIN_ATTEMPTS = 5;
+      var LOGIN_LOCKOUT_MS = 5 * 60 * 1000; // 5 minutes
+
+      function isLoginLocked() {
+        if (Date.now() < loginLockedUntil) {
+          var secsLeft = Math.ceil((loginLockedUntil - Date.now()) / 1000);
+          toast('Too many attempts. Try again in ' + secsLeft + 's.');
+          return true;
+        }
+        return false;
       }
 
-      async function submitAdminLogin() {
+      // ── Share Rate Limiting (localStorage) ────────────────────
+      var MAX_SHARES_PER_HOUR = 20;
+
+      function canShare() {
+        var now = Date.now();
+        var key = 'th_shares';
+        var data = JSON.parse(localStorage.getItem(key) || '[]');
+        // Keep only timestamps within the last hour
+        data = data.filter(function(t) { return now - t < 3600000; });
+        if (data.length >= MAX_SHARES_PER_HOUR) {
+          var oldest = data[0];
+          var waitMin = Math.ceil((3600000 - (now - oldest)) / 60000);
+          toast('Limit reached: ' + MAX_SHARES_PER_HOUR + ' links/hour. Try again in ' + waitMin + ' min.');
+          return false;
+        }
+        data.push(now);
+        localStorage.setItem(key, JSON.stringify(data));
+        return true;
+      }
+
+      function hashPassword(password) {
+        // Simple djb2 hash — works on file://, http://, and https://
+        var hash = 5381;
+        for (var i = 0; i < password.length; i++) {
+          hash = ((hash << 5) + hash) + password.charCodeAt(i);
+          hash = hash & hash; // Convert to 32-bit int
+        }
+        return String(hash >>> 0); // unsigned
+      }
+
+      function submitAdminLogin() {
+        if (isLoginLocked()) return;
         var password = document.getElementById("admin-password-input").value;
         if (!password.trim()) return;
-        var expectedHash = window.TERAHUB_CONFIG && window.TERAHUB_CONFIG.adminPasswordHash;
-        if (!expectedHash) { toast("Config not loaded!"); return; }
-        var inputHash = await hashPassword(password);
+        // Use hash from config.js if loaded, otherwise use built-in fallback hash
+        var expectedHash = (window.TERAHUB_CONFIG && window.TERAHUB_CONFIG.adminPasswordHash) || "3936514773";
+        var inputHash = hashPassword(password);
         if (inputHash === expectedHash) {
+          loginAttempts = 0;
           adminLoggedIn = true;
           closeAdminLogin();
           document.getElementById("tab-admin").classList.add("active");
@@ -639,9 +687,18 @@ nav {
           renderAdmin();
           toast("Admin login successful!");
         } else {
-          toast("Wrong password!");
-          document.getElementById("admin-password-input").value = "";
-          document.getElementById("admin-password-input").focus();
+          loginAttempts++;
+          if (loginAttempts >= MAX_LOGIN_ATTEMPTS) {
+            loginLockedUntil = Date.now() + LOGIN_LOCKOUT_MS;
+            loginAttempts = 0;
+            closeAdminLogin();
+            toast('Too many failed attempts. Locked for 5 minutes.');
+          } else {
+            var remaining = MAX_LOGIN_ATTEMPTS - loginAttempts;
+            toast('Wrong password! ' + remaining + ' attempt' + (remaining === 1 ? '' : 's') + ' left.');
+            document.getElementById("admin-password-input").value = "";
+            document.getElementById("admin-password-input").focus();
+          }
         }
       }
 
@@ -653,6 +710,8 @@ nav {
 
         // Update statistics
         document.getElementById("total-videos").textContent = videos.length;
+        var visits = parseInt(localStorage.getItem('th_visits') || '0');
+        document.getElementById("total-visits").textContent = visits;
 
         // Render all videos in admin table
         var list = document.getElementById("admin-videos-list");
@@ -794,6 +853,7 @@ nav {
       }
 
       function shareLink() {
+        if (!canShare()) return;
         var url = document.getElementById("link-input").value.trim();
         var title = document.getElementById("title-input").value.trim();
         if (!url) {
@@ -897,11 +957,9 @@ nav {
           if ((index + 1) % 4 === 0) {
             var adDiv = document.createElement("div");
             adDiv.className = "ad-container feed-ad-card";
-            adDiv.innerHTML = '<ins class="adsbygoogle" style="display: block" data-ad-client="ca-pub-5326120189055374" data-ad-slot="1953254223" data-ad-format="fluid" data-layout-key="-fb+5w+4e-db+86"></ins>';
+            adDiv.innerHTML = '<ins class="adsbygoogle" style="display: block" data-ad-client="ca-pub-5326120189055374" data-ad-slot="4273811174" data-ad-format="fluid" data-layout-key="-fb+5w+4e-db+86"></ins>';
             g.appendChild(adDiv);
-            if (window.adsbygoogle) {
-              window.adsbygoogle.push({});
-            }
+            try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch(e) {}
           }
         });
       }
@@ -987,7 +1045,10 @@ nav {
           '</div>';
 
         showPage("detail");
-        setTimeout(displayAds, 100);
+        // Track page visit
+        var visits = parseInt(localStorage.getItem('th_visits') || '0') + 1;
+        localStorage.setItem('th_visits', visits);
+        setTimeout(displayAllAds, 300);
 
         var secondsLeft = 5;
         var timerNumber = document.getElementById("timer-number");
