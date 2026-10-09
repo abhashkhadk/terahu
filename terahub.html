@@ -474,6 +474,8 @@ nav {
 
     <div class="toast" id="toast"></div>
 
+    <!-- Load app config (gitignored, never committed) -->
+    <script src="config.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
     <!-- Google AdSense -->
@@ -484,17 +486,11 @@ nav {
     ></script>
 
     <script>
-      // Your web app's Firebase configuration
-            const firebaseConfig = {
-        apiKey: "AIzaSyDnVfb5Za2EuVAJ4qBguhK0bAUotwdbyg8",
-        authDomain: "terahub-d2680.firebaseapp.com",
-        databaseURL: "https://terahub-d2680-default-rtdb.asia-southeast1.firebasedatabase.app",
-        projectId: "terahub-d2680",
-        storageBucket: "terahub-d2680.firebasestorage.app",
-        messagingSenderId: "635392929605",
-        appId: "1:635392929605:web:324c564ebbe63d44c1d82c",
-        measurementId: "G-ZMQZJ4M235"
-      };
+      // Load Firebase config from external config.js (gitignored)
+      if (!window.TERAHUB_CONFIG) {
+        console.error('config.js not found! Copy config.example.js to config.js and fill in your values.');
+      }
+      const firebaseConfig = window.TERAHUB_CONFIG ? window.TERAHUB_CONFIG.firebase : {};
 
       // Initialize Firebase
       firebase.initializeApp(firebaseConfig);
@@ -622,16 +618,27 @@ nav {
         document.getElementById("admin-password-input").value = "";
       }
 
-      function submitAdminLogin() {
+      async function hashPassword(password) {
+        const msgBuffer = new TextEncoder().encode(password);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      }
+
+      async function submitAdminLogin() {
         var password = document.getElementById("admin-password-input").value;
-        if (password === "admin123") {
+        if (!password.trim()) return;
+        var expectedHash = window.TERAHUB_CONFIG && window.TERAHUB_CONFIG.adminPasswordHash;
+        if (!expectedHash) { toast("Config not loaded!"); return; }
+        var inputHash = await hashPassword(password);
+        if (inputHash === expectedHash) {
           adminLoggedIn = true;
           closeAdminLogin();
           document.getElementById("tab-admin").classList.add("active");
           showPage("admin");
           renderAdmin();
           toast("Admin login successful!");
-        } else if (password.trim()) {
+        } else {
           toast("Wrong password!");
           document.getElementById("admin-password-input").value = "";
           document.getElementById("admin-password-input").focus();
