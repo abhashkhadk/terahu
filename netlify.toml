@@ -1,11 +1,9 @@
 [build]
-  command = "node build.js"
-  publish = "."
+  command = "npm run build"
+  publish = ".next"
 
-[[redirects]]
-  from = "/*"
-  to = "/terahub.html"
-  status = 200
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
 
 [[headers]]
   for = "/*"
