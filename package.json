@@ -7,6 +7,9 @@
     "build": "next build",
     "start": "next start"
   },
+  "devDependencies": {
+    "@netlify/plugin-nextjs": "^5.16.2"
+  },
   "dependencies": {
     "@next/env": "^15.5.9",
     "firebase": "^12.4.0",
