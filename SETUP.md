@@ -20,6 +20,10 @@ Netlify builds the app with `npm run build` and uses its Next.js plugin. Add the
 same environment variables from `.env.example` under **Site settings →
 Environment variables** before deploying.
 
+`netlify.toml` excludes only Firebase web configuration keys from Netlify's
+secrets scan because those identifiers are intentionally included in the client
+bundle. Never put service-account credentials or other private keys in them.
+
 ## Security
 
 The admin password check is client-side and is not a security boundary. Anyone
